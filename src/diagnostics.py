@@ -3,8 +3,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import sys
+import os
+sys.path.append(os.path.abspath('../src'))
+from utils import save_plot  # ✅ Import save utility
+
 def run_adf_test(series: pd.Series, asset_name: str) -> None:
-    """Perform the Augmented Dickey-Fuller test on a time series."""
     print(f"\n🔍 ADF Test for {asset_name}")
     result = adfuller(series.dropna())
     print(f"Test Statistic: {result[0]:.4f}")
@@ -19,29 +23,20 @@ def run_adf_test(series: pd.Series, asset_name: str) -> None:
 
 
 def calculate_var(series: pd.Series, confidence: float = 0.95) -> float:
-    """
-    Calculate Value at Risk (VaR) using historical method.
-    Returns the VaR at specified confidence level (default 95%).
-    """
     return -np.percentile(series.dropna(), (1 - confidence) * 100)
 
 
 def calculate_sharpe_ratio(series: pd.Series, risk_free_rate: float = 0.01) -> float:
-    """
-    Calculate the Sharpe Ratio.
-    Assumes daily returns and annualizes it.
-    """
     daily_excess_return = series - (risk_free_rate / 252)
     mean_return = daily_excess_return.mean()
     std_return = daily_excess_return.std()
-    sharpe_ratio = (mean_return / std_return) * np.sqrt(252)
-    return sharpe_ratio
-
+    return (mean_return / std_return) * np.sqrt(252)
 
 
 def plot_return_distribution_with_var(series: pd.Series, asset_name: str, confidence: float = 0.95) -> None:
     """
     Plot histogram of daily returns and show Value at Risk (VaR) as a vertical line.
+    Also saves the figure to results/plots.
     """
     var_value = calculate_var(series, confidence=confidence)
     
@@ -53,4 +48,9 @@ def plot_return_distribution_with_var(series: pd.Series, asset_name: str, confid
     plt.ylabel("Frequency")
     plt.legend()
     plt.grid(True)
+    
+    # ✅ Save the plot
+    filename = f"{asset_name.lower()}_return_distribution.png"
+    save_plot(filename)
+    
     plt.show()
