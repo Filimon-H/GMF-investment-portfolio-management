@@ -1,55 +1,79 @@
+# 📈 GMF Investment Portfolio Forecasting & Optimization
 
-# 📈 Portfolio Forecasting and Model Comparison for GMF Investments
+## 📄 Project Overview
+Guide Me in Finance (GMF) Investments is a forward-thinking financial advisory firm specializing in personalized portfolio management.  
+This project applies advanced **time series forecasting** and **Modern Portfolio Theory (MPT)** to optimize portfolio allocation across Tesla (TSLA), SPY, and BND, aiming to enhance returns while managing risk.
 
-A time series forecasting project designed for **Guide Me in Finance (GMF) Investments**, a forward-thinking financial advisory firm that leverages cutting-edge technology to optimize personalized portfolios. This project focuses on forecasting future market trends using ARIMA and LSTM models and supports portfolio optimization through enhanced insights into asset behaviors.
+We use:
+- **Historical market data** from Yahoo Finance (`yfinance`)
+- **ARIMA** and **LSTM** forecasting models
+- **Efficient Frontier optimization**
+- **Backtesting** to validate the strategy
 
 ---
 
 ## 📚 Table of Contents
-
-- [Business Context](#business-context)
-- [Features](#features)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Contributing Guidelines](#contributing-guidelines)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
-- [Contact Information](#contact-information)
-
----
-
-## 💼 Business Context
-
-**Guide Me in Finance (GMF) Investments** specializes in tailored portfolio management powered by real-time financial data and predictive analytics. The company uses advanced time series forecasting models to:
-- Predict trends in high-growth stocks (e.g., TSLA), diversified ETFs (e.g., SPY), and stable assets (e.g., BND)
-- Identify volatility and momentum patterns
-- Optimize asset allocation based on market movement forecasts
-- Make data-driven investment decisions that align with clients' risk and return profiles
-
-This project simulates the work of a GMF Financial Analyst using historical data and forecasting models to enhance portfolio strategy.
+1. [Features](#-features)
+2. [Project Structure](#-project-structure)
+3. [Setup Instructions](#-setup-instructions)
+4. [Usage](#-usage)
+5. [Reproducibility](#-reproducibility)
+6. [Troubleshooting](#-troubleshooting)
+7. [License](#-license)
 
 ---
 
 ## ✨ Features
-
-- Download historical price data using YFinance (TSLA, SPY, BND)
-- Clean and preprocess time series data
-- Perform exploratory data analysis (EDA) on price trends and volatility
-- Analyze risk with stationarity testing, Value at Risk (VaR), and Sharpe Ratio
-- Build and compare ARIMA and LSTM models on financial assets
-- Forecast future market movements (6–12 months)
-- Save forecasts and models for reproducibility
-- Plot trends and pseudo-confidence intervals
+- **Data Collection** from Yahoo Finance (`yfinance`)
+- **Data Cleaning & Processing** with reproducible scripts
+- **Exploratory Data Analysis** for trends, seasonality, and volatility
+- **ARIMA & LSTM Forecasting** for TSLA
+- **Efficient Frontier Optimization** (MPT) for TSLA, SPY, BND
+- **Portfolio Backtesting** vs. 60/40 SPY/BND benchmark
+- **Results & Visualizations** stored in `results/`
 
 ---
 
-## ⚙️ Installation
+## 📂 Project Structure
+```
+├── data/
+│   ├── raw/             # Unprocessed CSVs from yfinance
+│   ├── processed/       # Cleaned data
+├── models/              # Saved model artifacts (.pkl, .keras)
+├── notebooks/           # Jupyter notebooks (EDA, modeling, optimization, backtesting)
+├── results/
+│   ├── forecasts/       # Model forecasts
+│   ├── plots/           # Visualization outputs
+│   ├── optimization/    # Efficient frontier results
+├── scripts/             # Standalone Python scripts for reproducibility
+├── src/                 # Modular Python code
+├── requirements.txt     # Dependencies (pinned)
+├── README.md
+└── LICENSE
+```
 
-Clone the repository and install dependencies:
+---
 
+## ⚙️ Setup Instructions
+
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-username/gmf-portfolio-forecasting.git
+git clone https://github.com/yourusername/gmf-portfolio-forecasting.git
 cd gmf-portfolio-forecasting
+```
+
+### 2. Create and Activate a Virtual Environment
+```bash
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+```
+
+### 3. Install Dependencies
+```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
@@ -57,56 +81,64 @@ pip install -r requirements.txt
 
 ## 🚀 Usage
 
-Run step-by-step forecasting and portfolio optimization notebooks:
-
+### 1. Fetch and Preprocess Data
 ```bash
-jupyter notebook notebooks/task1_data_preprocessing.ipynb
+python scripts/fetch_data.py
+python scripts/preprocess.py
 ```
 
-Notebooks:
-- `data_preprocessing.ipynb` – Clean and structure raw YFinance data
-- `EDA.ipynb` – Visual and statistical exploration of asset behavior
-- `forecasting.ipynb` – Build ARIMA and LSTM models
-- `forecast_future.ipynb` – Long-term forecasts with interpretation
+### 2. Run the Notebooks in Order
+```plaintext
+notebooks/
+  1_data_preprocessing.ipynb
+  2_EDA.ipynb
+  3,Diagnostics.ipynb
+  4_forecasting.ipynb
+  5_forecast_future.ipynb
+  6_portfolio_optimization.ipynb
+  7_backtesting.ipynb
+```
 
-Outputs:
-- `data/processed/`: Clean datasets
-- `models/saved/`: Trained ARIMA and LSTM models
-- `results/forecasts/`: Prediction results
-- `results/plots/`: Trend and volatility visualizations
+### 3. Artifacts
+- **Forecasts** → `results/forecasts/`
+- **Plots** → `results/plots/`
+- **Optimization results** → `results/optimization/`
+- **Saved models** → `models/`
 
 ---
 
-## 🤝 Contributing Guidelines
+## 🔁 Reproducibility
+- Random seeds fixed where applicable:
+  - NumPy: `np.random.seed(42)`
+  - TensorFlow/Keras: `tf.keras.utils.set_random_seed(42)`
+- Dependencies pinned in `requirements.txt`
+- Outputs stored deterministically in `results/` and `models/`
 
-We welcome contributions:
+---
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit changes: `git commit -m 'feat: add something'`
-4. Push: `git push origin feature/my-feature`
-5. Submit a Pull Request
-
-Refer to `CONTRIBUTING.md` if available.
+## 🆘 Troubleshooting
+- **ModuleNotFoundError: `src`** → Add at the top of your notebook:
+  ```python
+  import sys, os
+  sys.path.append(os.path.abspath(".."))
+  ```
+- **`squared` argument error in sklearn** → Compute RMSE as:
+  ```python
+  rmse = mean_squared_error(y_true, y_pred) ** 0.5
+  ```
+- **TensorFlow protobuf warnings** → Safe to ignore, training proceeds normally.
 
 ---
 
 ## 📜 License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more information.
+MIT License – see [LICENSE](LICENSE) for details.
 
 ---
 
 ## 🙌 Acknowledgments
-
-- 10 Academy – for framing the business challenge
-- Yahoo Finance (YFinance) – for real-time financial data
-- TensorFlow, Pmdarima, Statsmodels – for time series modeling tools
+- [Yahoo Finance API](https://pypi.org/project/yfinance/)
+- [Statsmodels](https://www.statsmodels.org/)
+- [PyPortfolioOpt](https://pyportfolioopt.readthedocs.io/)
+- [TensorFlow/Keras](https://www.tensorflow.org/)
 
 ---
-
-## 📬 Contact Information
-
-Created by **Filimon Hailemariam**  
-Challenge: **10 Academy – Week 11**  
-Domain: **Time Series Forecasting & Portfolio Optimization for GMF Investments**
