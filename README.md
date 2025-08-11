@@ -4,7 +4,7 @@
 Guide Me in Finance (GMF) Investments is a forward-thinking financial advisory firm specializing in personalized portfolio management.  
 This project applies advanced **time series forecasting** and **Modern Portfolio Theory (MPT)** to optimize portfolio allocation across Tesla (TSLA), SPY, and BND, aiming to enhance returns while managing risk.
 
-We use:
+We used:
 - **Historical market data** from Yahoo Finance (`yfinance`)
 - **ARIMA** and **LSTM** forecasting models
 - **Efficient Frontier optimization**
@@ -14,12 +14,15 @@ We use:
 
 ## 📚 Table of Contents
 1. [Features](#-features)
-2. [Project Structure](#-project-structure)
-3. [Setup Instructions](#-setup-instructions)
-4. [Usage](#-usage)
-5. [Reproducibility](#-reproducibility)
-6. [Troubleshooting](#-troubleshooting)
-7. [License](#-license)
+2. [Tasks & Methodology](#-tasks--methodology)
+3. [Project Structure](#-project-structure)
+4. [Setup Instructions](#-setup-instructions)
+5. [Usage](#-usage)
+6. [Results Summary](#-results-summary)
+7. [Conclusion](#-conclusion)
+8. [Reproducibility](#-reproducibility)
+9. [Troubleshooting](#-troubleshooting)
+10. [License](#-license)
 
 ---
 
@@ -31,6 +34,67 @@ We use:
 - **Efficient Frontier Optimization** (MPT) for TSLA, SPY, BND
 - **Portfolio Backtesting** vs. 60/40 SPY/BND benchmark
 - **Results & Visualizations** stored in `results/`
+
+---
+
+## 📊 Tasks & Methodology
+
+### **Task 1 – Data Preprocessing & EDA**
+- Collected daily OHLCV data (2015–2025) for **TSLA**, **SPY**, and **BND**.
+- Cleaned missing values (interpolation) and normalized closing prices for comparison.
+- Analyzed volatility using rolling statistics.
+- Performed **stationarity tests (ADF)**:
+  - Prices → Non-stationary
+  - Returns → Stationary
+- **Risk metrics**:
+  - **VaR (95%)**: TSLA 5.47%, SPY 1.72%, BND 0.49%
+  - **Sharpe Ratios**: TSLA 0.76, SPY 0.74, BND 0.17
+
+---
+
+### **Task 2 – Forecasting Models**
+- Implemented **ARIMA** and **LSTM** models for TSLA.
+- **ARIMA**:
+  - MAE: 62.97, RMSE: 77.96, MAPE: 24.09%
+  - Produced flat forecasts, failed to capture volatility/trends.
+- **LSTM**:
+  - MAE: 10.83, RMSE: 15.11, MAPE: 4.07%
+  - Closely tracked actual prices, captured both trends and volatility.
+- **Decision**: LSTM selected for future forecasting due to significantly better performance.
+
+---
+
+### **Task 3 – Future Trend Forecasting**
+- Generated **12-month forecast** for TSLA using LSTM.
+- Prediction: gradual decline, stabilizing near **$240–$250**.
+- Added ±5% **confidence band** to show uncertainty.
+- Lower expected volatility compared to recent history.
+- This forecast used as TSLA’s **expected return** in portfolio optimization.
+
+---
+
+### **Task 4 – Portfolio Optimization (MPT)**
+- Used:
+  - TSLA forecast return (from Task 3)
+  - Historical returns for SPY and BND
+  - Covariance matrix from historical daily returns
+- Simulated portfolios to generate the **Efficient Frontier**.
+- Identified:
+  - ⭐ **Max Sharpe Ratio Portfolio**:
+    - Return: 9.10%, Volatility: 0.69%, Sharpe: 11.77
+    - Weights: TSLA 0.01%, SPY 57.03%, BND 42.96%
+  - 🛡 **Min Volatility Portfolio**:
+    - Return: 2.74%, Volatility: 0.34%, Sharpe: 5.09
+    - Weights: TSLA 0.30%, SPY 6.88%, BND 92.82%
+
+---
+
+### **Task 5 – Backtesting**
+- Compared the **Max Sharpe portfolio** to a **60/40 SPY/BND benchmark** over the last year.
+- Metrics:
+  - Cumulative return of optimized portfolio exceeded benchmark.
+  - Higher Sharpe Ratio for optimized portfolio.
+- Conclusion: Optimized portfolio offered better risk-adjusted returns in the test period.
 
 ---
 
@@ -55,90 +119,80 @@ We use:
 ---
 
 ## ⚙️ Setup Instructions
-
-### 1. Clone the Repository
 ```bash
 git clone https://github.com/yourusername/gmf-portfolio-forecasting.git
 cd gmf-portfolio-forecasting
-```
-
-### 2. Create and Activate a Virtual Environment
-```bash
 python -m venv .venv
 # Windows
 .venv\Scripts\activate
 # macOS/Linux
 source .venv/bin/activate
-```
-
-### 3. Install Dependencies
-```bash
-python -m pip install --upgrade pip
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
 ---
 
 ## 🚀 Usage
-
-### 1. Fetch and Preprocess Data
+1. **Fetch & Preprocess Data**
 ```bash
 python scripts/fetch_data.py
 python scripts/preprocess.py
 ```
-
-### 2. Run the Notebooks in Order
-```plaintext
-notebooks/
-  1_data_preprocessing.ipynb
-  2_EDA.ipynb
-  3,Diagnostics.ipynb
-  4_forecasting.ipynb
-  5_forecast_future.ipynb
-  6_portfolio_optimization.ipynb
-  7_backtesting.ipynb
+2. **Run notebooks in order**:
+```
+1_data_preprocessing.ipynb
+2_EDA.ipynb
+3_diagnostics.ipynb
+4_forecasting.ipynb
+5_forecast_future.ipynb
+6_portfolio_optimization.ipynb
+7_backtesting.ipynb
 ```
 
-### 3. Artifacts
-- **Forecasts** → `results/forecasts/`
-- **Plots** → `results/plots/`
-- **Optimization results** → `results/optimization/`
-- **Saved models** → `models/`
+---
+
+## 📊 Results Summary
+| Portfolio | Return | Volatility | Sharpe | TSLA | SPY | BND |
+|-----------|--------|------------|--------|------|-----|-----|
+| Max Sharpe | 9.10% | 0.69% | 11.77 | 0.01% | 57.03% | 42.96% |
+| Min Volatility | 2.74% | 0.34% | 5.09 | 0.30% | 6.88% | 92.82% |
+
+---
+
+## 🏁 Conclusion
+- **Task 1–3** built a strong forecasting foundation, showing LSTM’s superiority for TSLA.
+- **Task 4** transformed forecasts into actionable portfolio allocations using MPT.
+- **Task 5** confirmed through backtesting that the optimized portfolio outperformed a standard 60/40 benchmark in risk-adjusted returns.
+- **Investor Takeaway**:
+  - **Aggressive** → Max Sharpe Portfolio for higher returns with controlled risk.
+  - **Conservative** → Min Volatility Portfolio for maximum stability.
+- The process demonstrated how **data-driven forecasts + optimization** can guide portfolio strategy.
 
 ---
 
 ## 🔁 Reproducibility
-- Random seeds fixed where applicable:
-  - NumPy: `np.random.seed(42)`
-  - TensorFlow/Keras: `tf.keras.utils.set_random_seed(42)`
-- Dependencies pinned in `requirements.txt`
-- Outputs stored deterministically in `results/` and `models/`
+- Fixed random seeds:  
+  - NumPy: `np.random.seed(42)`  
+  - TensorFlow: `tf.keras.utils.set_random_seed(42)`
+- Pinned dependencies in `requirements.txt`
+- All results saved in `results/`
 
 ---
 
 ## 🆘 Troubleshooting
-- **ModuleNotFoundError: `src`** → Add at the top of your notebook:
-  ```python
-  import sys, os
-  sys.path.append(os.path.abspath(".."))
-  ```
-- **`squared` argument error in sklearn** → Compute RMSE as:
-  ```python
-  rmse = mean_squared_error(y_true, y_pred) ** 0.5
-  ```
-- **TensorFlow protobuf warnings** → Safe to ignore, training proceeds normally.
+- **ModuleNotFoundError: `src`** → Add:
+```python
+import sys, os
+sys.path.append(os.path.abspath(".."))
+```
+- **`squared` argument error** →  
+```python
+rmse = mean_squared_error(y_true, y_pred) ** 0.5
+```
+- TensorFlow protobuf warnings are safe to ignore.
 
 ---
 
 ## 📜 License
 MIT License – see [LICENSE](LICENSE) for details.
-
----
-
-## 🙌 Acknowledgments
-- [Yahoo Finance API](https://pypi.org/project/yfinance/)
-- [Statsmodels](https://www.statsmodels.org/)
-- [PyPortfolioOpt](https://pyportfolioopt.readthedocs.io/)
-- [TensorFlow/Keras](https://www.tensorflow.org/)
-
----
