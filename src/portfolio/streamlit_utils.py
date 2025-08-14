@@ -75,3 +75,43 @@ def last_updated_timestamp(paths: Optional[List[str]] = None) -> str:
         return "N/A"
     dt = datetime.utcfromtimestamp(max(mtimes))
     return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+
+# --- LSTM forecast helpers (overlay-ready) ---
+import numpy as np
+from typing import Iterable, Dict, Any
+
+def to_trading_days(months: int) -> int:
+    return int(round(months * 21))
+
+def get_last_close_window(ts: pd.Series, lookback: int) -> np.ndarray:
+    """
+    Return the last 'lookback' closes as shape (lookback, 1) for the LSTM.
+    """
+    vals = ts.dropna().values.astype("float32")
+    if len(vals) < lookback:
+        raise ValueError(f"Series shorter than lookback={lookback}")
+    window = vals[-lookback:]
+    return window.reshape(-1, 1)
+
+def annualized_return_from_path(forecast_close: Iterable[float]) -> float:
+    """
+    Simple annualized return from first to last forecasted close.
+    """
+    fc = list(forecast_close)
+    if len(fc) < 2 or fc[0] == 0:
+        return np.nan
+    total_r = (fc[-1] / fc[0]) - 1.0
+    # assume path is for N trading days; annualize with 252
+    n = len(fc)
+    return (1.0 + total_r) ** (252.0 / n) - 1.0
+
+def build_ci_band(series: pd.Series, pct: float = 0.05) -> Dict[str, Any]:
+    """
+    Build a ±pct band around a forecast series (rough proxy CI).
+    Returns dict with 'lower' and 'upper' pd.Series.
+    """
+    lower = series * (1.0 - pct)
+    upper = series * (1.0 + pct)
+    return {"lower": lower, "upper": upper}
