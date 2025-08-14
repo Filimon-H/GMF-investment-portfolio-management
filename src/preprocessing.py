@@ -1,5 +1,7 @@
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+import joblib
+import os
 
 def inspect_asset(df: pd.DataFrame, name: str) -> None:
     """Print basic stats, missing values, data types, and duplicates."""
@@ -28,7 +30,7 @@ def clean_missing_values(df: pd.DataFrame, method: str = 'interpolate') -> pd.Da
         raise ValueError("Method must be 'interpolate', 'drop', or 'ffill'")
 
 
-def normalize_close_column(df: pd.DataFrame) -> pd.DataFrame:
+#def normalize_close_column(df: pd.DataFrame) -> pd.DataFrame:
     """
     Normalize the 'Close' column using Min-Max Scaling.
 
@@ -38,3 +40,34 @@ def normalize_close_column(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df["Close_Normalized"] = scaler.fit_transform(df[["Close"]])
     return df
+
+
+
+
+
+
+def normalize_close_column(df: pd.DataFrame, save_scaler: bool = False, scaler_filename: str = None) -> pd.DataFrame:
+    """
+    Normalize the 'Close' column using Min-Max Scaling.
+    
+    If save_scaler=True and scaler_filename is provided, 
+    the fitted scaler will be saved under models/saved/.
+    
+    Returns a DataFrame with a new 'Close_Normalized' column.
+    """
+    scaler = MinMaxScaler()
+    df = df.copy()
+    df["Close_Normalized"] = scaler.fit_transform(df[["Close"]])
+    
+    if save_scaler and scaler_filename:
+        # Build absolute path to models/saved/
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # go up from src/ to project root
+        save_dir = os.path.join(base_dir, "models", "saved")
+        os.makedirs(save_dir, exist_ok=True)  # ensure directory exists
+        
+        scaler_path = os.path.join(save_dir, scaler_filename)
+        joblib.dump(scaler, scaler_path)
+        print(f"Scaler saved to {scaler_path}")
+    
+    return df
+
