@@ -1,9 +1,13 @@
 # src/portfolio/streamlit_utils.py
 from __future__ import annotations
+import streamlit as st
 import os
 import pandas as pd
 from datetime import datetime
 from typing import Tuple, Optional, List
+
+
+
 
 DATA_DIR = os.path.join("Data", "processed")   # <-- matches your screenshot
 
@@ -11,6 +15,7 @@ def _csv_path_for(ticker: str) -> str:
     fname = f"{ticker.upper()}_clean.csv"
     return os.path.join(DATA_DIR, fname)
 
+@st.cache_data(ttl=3600)
 def load_price_df(ticker: str) -> pd.DataFrame:
     """
     Load a processed CSV for a ticker. Returns a DataFrame indexed by Date.
@@ -32,7 +37,7 @@ def load_price_df(ticker: str) -> pd.DataFrame:
 
 #def filter_by_date(df: pd.DataFrame, start: datetime, end: datetime) -> pd.DataFrame:
     return df.loc[(df.index >= pd.to_datetime(start)) & (df.index <= pd.to_datetime(end))]
-
+@st.cache_data(ttl=3600)
 def filter_by_date(df: pd.DataFrame, start, end) -> pd.DataFrame:
     start = pd.to_datetime(start)
     end = pd.to_datetime(end)
@@ -115,3 +120,70 @@ def build_ci_band(series: pd.Series, pct: float = 0.05) -> Dict[str, Any]:
     lower = series * (1.0 - pct)
     upper = series * (1.0 + pct)
     return {"lower": lower, "upper": upper}
+
+
+# --- Portfolio helpers (expected returns, covariance, metrics, VaR) ---
+import numpy as np
+import streamlit as st
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_close_series(ticker: str) -> pd.Series:
+    df = load_price_df(ticker)
+    return df["Close"].dropna().astype(float)
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def load_daily_returns(tickers=("TSLA","SPY","BND")) -> pd.DataFrame:
+    # align on common dates
+    series = {t: load_close_series(t).pct_change().dropna() for t in tickers}
+    df = pd.concat(series, axis=1).dropna().sort_index()
+    df.columns = list(tickers)
+    return df
+
+def annualize_vectorized(mean_daily: pd.Series, cov_daily: pd.DataFrame):
+    mu_annual = mean_daily * 252.0
+    cov_annual = cov_daily * 252.0
+    return mu_annual, cov_annual
+
+def build_mu_sigma(tsla_mu_annual: float | None) -> tuple[pd.Series, pd.DataFrame]:
+    """
+    TSLA expected return: provided (from LSTM annualized).
+    SPY/BND expected return: historical annualized mean.
+    Covariance: historical annualized (all three).
+    """
+    rets = load_daily_returns(("TSLA","SPY","BND"))
+    mu_annual_hist, cov_annual = annualize_vectorized(rets.mean(), rets.cov())
+    mu = mu_annual_hist.copy()
+    if tsla_mu_annual is not None and not np.isnan(tsla_mu_annual):
+        mu.loc["TSLA"] = float(tsla_mu_annual)
+    return mu, cov_annual
+
+def portfolio_metrics(weights: np.ndarray, mu: pd.Series, cov: pd.DataFrame, rf: float = 0.01):
+    """
+    weights in same order as mu.index (TSLA, SPY, BND).
+    Returns (annual_return, annual_vol, sharpe).
+    """
+    w = np.asarray(weights, dtype=float)
+    ann_ret = float(np.dot(w, mu.values))
+    ann_vol = float(np.sqrt(np.dot(w, np.dot(cov.values, w))))
+    sharpe = (ann_ret - rf) / ann_vol if ann_vol > 0 else np.nan
+    return ann_ret, ann_vol, sharpe
+
+def normalize_weights(w: list[float]) -> np.ndarray:
+    w = np.asarray(w, dtype=float)
+    s = w.sum()
+    return (w / s) if s > 0 else np.array([1/len(w)]*len(w))
+
+def normal_var(amount: float, ann_ret: float, ann_vol: float, months: int, alpha: float = 0.95) -> tuple[float,float]:
+    """
+    Parametric (normal) VaR on chosen horizon.
+    Returns (VaR_pct, VaR_$). Positive = loss threshold.
+    """
+    days = int(round(months * 21))
+    mu_h = ann_ret / 252.0 * days
+    sigma_h = ann_vol / np.sqrt(252.0) * np.sqrt(days)
+    z = 1.645 if alpha == 0.95 else 2.326  # simple map for 95%/99%
+    # loss at alpha quantile ~ -(mu - z*sigma)
+    var_pct = max(0.0, (z * sigma_h - mu_h))
+    var_dollars = amount * var_pct
+    return float(var_pct), float(var_dollars)
+

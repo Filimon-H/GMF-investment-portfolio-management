@@ -1,9 +1,8 @@
 # src/lstm_model.py
 from __future__ import annotations
-
-import os
 from typing import Tuple, Optional
-
+import os
+import streamlit as st
 import numpy as np
 from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, Dense
@@ -52,6 +51,7 @@ def build_lstm_model(input_shape: Tuple[int, int]) -> Sequential:
 # -----------------------
 # Inference-time helpers (EXPOSED)
 # -----------------------
+@st.cache_resource
 def load_lstm_and_scaler() -> Tuple:
     """
     Load the saved Keras model (.keras) and the MinMaxScaler (if present).
