@@ -11,17 +11,18 @@ from src.portfolio.streamlit_utils import (
 # --- Page config ---
 st.set_page_config(
     page_title="GMF | Forecast & Portfolio Dashboard",
-    page_icon="📈",
+    #page_icon="📈",
+    page_icon="../data/processed/GMF.png",
     layout="wide"
 )
 
 # --- Header / Summary Card ---
 col_logo, col_title, col_kpis = st.columns([0.12, 0.58, 0.30])
 with col_logo:
-    st.markdown("### 🟦")  # placeholder for your logo (replace later)
+    st.image("Data/raw/GMF.png", width=500) # placeholder for your logo (replace later)
 with col_title:
     st.markdown("## GMF Investments — Forecast & Portfolio Dashboard")
-    st.caption("Forecasts are for informational purposes only.")
+    #st.caption("Forecasts are for informational purposes only.")
 with col_kpis:
     st.caption(f"Last updated: **{last_updated_timestamp()}**")
 
@@ -37,18 +38,27 @@ with ctrl1:
 df_all = load_price_df(ticker)
 min_d, max_d = df_all.index.min().date(), df_all.index.max().date()
 
+
+# Always supply a tuple as default so Streamlit renders a range picker
 with ctrl2:
-    rng = st.date_input(
-        "Date Range",
-        value=(min_d, max_d),
-        min_value=min_d,
-        max_value=max_d
-    )
-    # Ensure tuple (start, end)
-    if isinstance(rng, tuple):
-        start_d, end_d = rng
-    else:
-        start_d, end_d = min_d, max_d
+ rng = st.date_input(
+    "Date Range",
+    value=(min_d, max_d),
+    min_value=min_d,
+    max_value=max_d
+)
+
+# Robustly interpret the return value
+if isinstance(rng, tuple) and len(rng) == 2:
+    start_d, end_d = rng
+else:
+    # User picked a single date or cleared one side; fall back gracefully
+    start_d = rng if not isinstance(rng, tuple) else rng[0]
+    end_d = max_d
+
+#############################
+
+
 
 with ctrl3:
     last_px, pct = latest_price_and_change(df_all)

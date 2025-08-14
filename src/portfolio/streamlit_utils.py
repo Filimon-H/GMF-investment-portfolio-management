@@ -30,8 +30,14 @@ def load_price_df(ticker: str) -> pd.DataFrame:
     cols = [c for c in ["Open", "High", "Low", "Close", "Adj Close", "Volume", "Ticker"] if c in df.columns]
     return df[cols].sort_index()
 
-def filter_by_date(df: pd.DataFrame, start: datetime, end: datetime) -> pd.DataFrame:
+#def filter_by_date(df: pd.DataFrame, start: datetime, end: datetime) -> pd.DataFrame:
     return df.loc[(df.index >= pd.to_datetime(start)) & (df.index <= pd.to_datetime(end))]
+
+def filter_by_date(df: pd.DataFrame, start, end) -> pd.DataFrame:
+    start = pd.to_datetime(start)
+    end = pd.to_datetime(end)
+    return df.loc[(df.index >= start) & (df.index <= end)]
+
 
 def latest_price_and_change(df: pd.DataFrame) -> Tuple[Optional[float], Optional[float]]:
     """
