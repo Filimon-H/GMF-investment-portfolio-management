@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import date
 import plotly.graph_objects as go
 import os
-
+import numpy as np
 from src.portfolio.streamlit_utils import (
     load_price_df, filter_by_date, latest_price_and_change, last_updated_timestamp
 )
@@ -173,6 +173,131 @@ with st.sidebar:
     st.caption("TSLA / SPY / BND — live headlines here.")
     st.info("We’ll integrate Finnhub 'company-news' with a refresh button.")
 
+
+
+st.divider()
+st.markdown("## 🎛️ Portfolio Playground")
+
+# --- TSLA μ (annualized) source ---
+# If we computed a forecast earlier, store μ in session for reuse
+if "tsla_mu_annual" not in st.session_state:
+    st.session_state.tsla_mu_annual = None
+
+# If TSLA forecast was just computed above, drop it into session:
+# (You already compute mu_annual in the TSLA block. Add this there:)
+#   st.session_state.tsla_mu_annual = mu_annual
+
+from src.portfolio.streamlit_utils import (
+    build_mu_sigma, portfolio_metrics, normalize_weights, normal_var, load_daily_returns
+)
+
+mu, cov = build_mu_sigma(st.session_state.tsla_mu_annual)  # μ uses LSTM for TSLA if available
+tickers = list(mu.index)  # ["TSLA","SPY","BND"]
+
+# --- Controls: weights + presets/optimize ---
+c1, c2, c3, c4 = st.columns([0.25, 0.25, 0.25, 0.25])
+
+with c1:
+    w_tsla = st.slider("TSLA %", 0, 100, 20, step=1)
+with c2:
+    w_spy = st.slider("SPY %", 0, 100, 50, step=1)
+with c3:
+    w_bnd = st.slider("BND %", 0, 100, 30, step=1)
+with c4:
+    auto_norm = st.checkbox("Auto-normalize", value=True)
+
+w = np.array([w_tsla, w_spy, w_bnd], dtype=float) / 100.0
+if auto_norm:
+    w = normalize_weights(w)
+
+# Presets & optimize buttons
+b1, b2, b3, b4, b5 = st.columns(5)
+with b1:
+    if st.button("60 / 40"):
+        w = np.array([0.0, 0.60, 0.40])
+with b2:
+    if st.button("Max Sharpe"):
+        # simple Monte Carlo search (fast & good enough)
+        rng = np.random.default_rng(42)
+        W = rng.random((8000, 3)); W = W / W.sum(axis=1, keepdims=True)
+        rets = W @ mu.values
+        vols = np.sqrt(np.sum(W @ cov.values * W, axis=1))
+        sharpe = (rets - 0.01) / vols
+        w = W[np.argmax(sharpe)]
+with b3:
+    if st.button("Min Vol"):
+        rng = np.random.default_rng(7)
+        W = rng.random((8000, 3)); W = W / W.sum(axis=1, keepdims=True)
+        vols = np.sqrt(np.sum(W @ cov.values * W, axis=1))
+        w = W[np.argmin(vols)]
+with b4:
+    if st.button("Max Return"):
+        rng = np.random.default_rng(21)
+        W = rng.random((8000, 3)); W = W / W.sum(axis=1, keepdims=True)
+        rets = W @ mu.values
+        w = W[np.argmax(rets)]
+with b5:
+    if st.button("Risk Parity"):
+        # inverse vol heuristic on historical daily returns
+        rets_df = load_daily_returns(tuple(tickers))
+        iv = 1.0 / rets_df.std().values
+        w = iv / iv.sum()
+
+# Show current weights
+st.caption(f"Current Weights → TSLA: **{w[0]*100:.2f}%**, SPY: **{w[1]*100:.2f}%**, BND: **{w[2]*100:.2f}%**")
+
+# --- Metrics & VaR ---
+rf = 0.01
+ann_ret, ann_vol, sharpe = portfolio_metrics(w, mu, cov, rf=rf)
+
+mc1, mc2, mc3, mc4 = st.columns(4)
+mc1.metric("Expected Annual Return", f"{ann_ret*100:.2f}%")
+mc2.metric("Annual Volatility", f"{ann_vol*100:.2f}%")
+mc3.metric("Sharpe (rf=1%)", f"{sharpe:.2f}")
+
+amt_col, hor_col, alpha_col = st.columns([0.4, 0.3, 0.3])
+with amt_col:
+    invest_amount = st.number_input("Investment Amount ($)", min_value=1000, value=10000, step=500)
+with hor_col:
+    var_months = st.selectbox("VaR Horizon (months)", [3, 6, 9, 12, 18, 24], index=1)
+with alpha_col:
+    alpha = st.selectbox("VaR Confidence", ["95%", "99%"], index=0)
+alpha_val = 0.95 if alpha == "95%" else 0.99
+
+var_pct, var_usd = normal_var(invest_amount, ann_ret, ann_vol, months=var_months, alpha=alpha_val)
+mc4.metric(f"VaR ({alpha} / {var_months}m)", f"{var_pct*100:.2f}% ≈ ${var_usd:,.0f}")
+
+# --- Downloads ---
+dl1, dl2 = st.columns(2)
+with dl1:
+    if st.button("⬇️ Download Weights (CSV)"):
+        import io
+        buf = io.StringIO()
+        pd.Series(w, index=tickers, name="weight").to_csv(buf)
+        st.download_button("Save Weights CSV", data=buf.getvalue(), file_name="weights.csv", mime="text/csv")
+with dl2:
+    if st.button("⬇️ Download Metrics (JSON)"):
+        import json
+        payload = {
+            "weights": dict(zip(tickers, [float(x) for x in w])),
+            "expected_return_annual": float(ann_ret),
+            "volatility_annual": float(ann_vol),
+            "sharpe_rf_1pct": float(sharpe),
+            "VaR_horizon_months": int(var_months),
+            "VaR_confidence": alpha,
+            "VaR_pct": float(var_pct),
+            "VaR_usd": float(var_usd),
+        }
+        st.download_button(
+            "Save Metrics JSON",
+            data=json.dumps(payload, indent=2),
+            file_name="portfolio_metrics.json",
+            mime="application/json"
+        )
+
+
+
+
 # --- Footer ---
 st.markdown("<hr/>", unsafe_allow_html=True)
-st.caption("© GMF Investments — Forecasts are for informational purposes only.")
+st.caption("© GMF Investments.")
