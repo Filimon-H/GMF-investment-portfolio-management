@@ -187,3 +187,23 @@ def normal_var(amount: float, ann_ret: float, ann_vol: float, months: int, alpha
     var_dollars = amount * var_pct
     return float(var_pct), float(var_dollars)
 
+
+# --- Load notebook presets (weights + metrics) ---
+import json
+import streamlit as st
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_presets_json(path: str = "results/optimization/presets.json"):
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+        # validate minimal structure
+        w = data.get("weights", {})
+        for key in ["max_sharpe", "min_vol", "sixty_forty"]:
+            if key in w:
+                _ = [w[key][t] for t in ["TSLA", "SPY", "BND"]]  # raises if missing
+        return data
+    except Exception:
+        return None
