@@ -1,7 +1,8 @@
 # src/portfolio/portfolio_utils.py
 
 import pandas as pd
-
+import numpy as np
+from typing import Optional, Dict
 def load_asset_data(tsla_path, spy_path, bnd_path):
     """Load processed data for TSLA, SPY, BND."""
     tsla = pd.read_csv(tsla_path, parse_dates=["Date"], index_col="Date")
@@ -98,3 +99,44 @@ def plot_efficient_frontier(portfolios_df, asset_labels, save_path=None):
     plt.show()
 
     return max_sharpe_idx, min_vol_idx
+
+
+
+
+def compute_max_return_weights(mu: pd.Series, caps: Optional[Dict[str, float]] = None) -> np.ndarray:
+    """
+    Maximize expected return under long-only, sum-to-1.
+    Default (no caps): allocate 100% to the asset with the largest μ.
+    With caps: greedy fill from highest μ down, respecting caps (0..1).
+    """
+    tickers = list(mu.index)
+    n = len(tickers)
+    w = np.zeros(n, dtype=float)
+
+    if not caps:
+        w[np.argmax(mu.values)] = 1.0
+        return w
+
+    # Greedy with caps
+    remaining = 1.0
+    # order by descending mu
+    order = np.argsort(-mu.values)
+    for i in order:
+        t = tickers[i]
+        cap = float(caps.get(t, 1.0))
+        alloc = min(cap, remaining)
+        w[i] = alloc
+        remaining -= alloc
+        if remaining <= 1e-9:
+            break
+    # if caps too tight, spread remainder uniformly (optional)
+    if remaining > 1e-9:
+        free_idx = [i for i in range(n) if w[i] < caps.get(tickers[i], 1.0)]
+        if free_idx:
+            bump = remaining / len(free_idx)
+            for i in free_idx:
+                room = caps.get(tickers[i], 1.0) - w[i]
+                w[i] += min(bump, max(0.0, room))
+    # normalize
+    s = w.sum()
+    return w / s if s > 0 else np.ones(n)/n

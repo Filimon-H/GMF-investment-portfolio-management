@@ -5,6 +5,7 @@ from datetime import date
 import plotly.graph_objects as go
 import os
 import numpy as np
+from src.portfolio_utils import compute_max_return_weights
 from src.portfolio.streamlit_utils import (
     load_price_df, filter_by_date, latest_price_and_change, last_updated_timestamp
 )
@@ -175,6 +176,28 @@ with st.sidebar:
 
 
 
+def _queue_weights(wdict: dict[str, float]):
+    """Queue preset weights (0..1), then rerun so we can apply them before sliders render."""
+    st.session_state._queued_weights = {
+        "TSLA": float(wdict.get("TSLA", 0.0)),
+        "SPY":  float(wdict.get("SPY",  0.0)),
+        "BND":  float(wdict.get("BND",  0.0)),
+    }
+    st.rerun()
+
+
+# Apply queued preset weights BEFORE rendering sliders (prevents Streamlit API exception)
+if "_queued_weights" in st.session_state:
+    q = st.session_state.pop("_queued_weights")  # remove & apply once
+    st.session_state.w_tsla = int(round(q["TSLA"] * 100))
+    st.session_state.w_spy  = int(round(q["SPY"]  * 100))
+    st.session_state.w_bnd  = int(round(q["BND"]  * 100))
+
+
+
+
+
+
 st.divider()
 st.markdown("## 🎛️ Portfolio Playground")
 
@@ -194,54 +217,154 @@ from src.portfolio.streamlit_utils import (
 mu, cov = build_mu_sigma(st.session_state.tsla_mu_annual)  # μ uses LSTM for TSLA if available
 tickers = list(mu.index)  # ["TSLA","SPY","BND"]
 
-# --- Controls: weights + presets/optimize ---
-c1, c2, c3, c4 = st.columns([0.25, 0.25, 0.25, 0.25])
 
+
+from src.portfolio.streamlit_utils import load_presets_json
+presets_json = load_presets_json()
+
+
+
+# --- Preset loader + slider applier ---
+from src.portfolio.streamlit_utils import load_presets_json
+presets_json = load_presets_json()  # reads results/optimization/presets.json
+
+def _apply_weights_dict(wdict: dict[str, float]):
+    """
+    Accepts weights in decimals (0..1). Pushes to sliders (percent ints).
+    Forces a rerun so UI reflects the change immediately.
+    """
+    st.session_state.w_tsla = int(round(wdict.get("TSLA", 0.0) * 100))
+    st.session_state.w_spy  = int(round(wdict.get("SPY",  0.0) * 100))
+    st.session_state.w_bnd  = int(round(wdict.get("BND",  0.0) * 100))
+    st.rerun()  # <- important to refresh the slider positions
+
+
+
+
+
+# --- Constrained sliders: always sum to 100% ---
+# --- HARD-CAP SLIDERS: sum cannot exceed 100% ---
+
+# Initialize defaults in session_state (so presets can move them too)
+# --- THREE SLIDERS, EACH 0–100, WITH SUM HARD-CAPPED AT 100 ---
+# Behavior: when you move one slider, the other two are auto-adjusted so total ≤ 100
+
+# --- Three sliders 0..100 with auto-rebalance so total <= 100 ---
+
+# Initialize once
+# --- THREE SLIDERS, SUM ALWAYS 100, WITH YOUR DESIRED RULES ---
+
+def _init(k, v):
+    if k not in st.session_state:
+        st.session_state[k] = v
+
+# neutral defaults (any values are fine; presets will override)
+_init("w_tsla", 33)
+_init("w_spy",  33)
+_init("w_bnd",  34)
+
+def _on_tsla_change():
+    # Split the remainder equally between SPY and BND
+    rem = max(0, 100 - int(st.session_state.w_tsla))
+    st.session_state.w_spy = rem // 2
+    st.session_state.w_bnd = rem - st.session_state.w_spy  # absorbs rounding
+
+def _on_spy_change():
+    # Keep TSLA fixed; SPY can't exceed (100 - TSLA); BND gets the remainder
+    max_spy = max(0, 100 - int(st.session_state.w_tsla))
+    st.session_state.w_spy = min(int(st.session_state.w_spy), max_spy)
+    st.session_state.w_bnd = max(0, 100 - int(st.session_state.w_tsla) - int(st.session_state.w_spy))
+
+def _on_bnd_change():
+    # Keep TSLA fixed; BND can't exceed (100 - TSLA); SPY gets the remainder
+    max_bnd = max(0, 100 - int(st.session_state.w_tsla))
+    st.session_state.w_bnd = min(int(st.session_state.w_bnd), max_bnd)
+    st.session_state.w_spy = max(0, 100 - int(st.session_state.w_tsla) - int(st.session_state.w_bnd))
+
+c1, c2, c3 = st.columns(3)
 with c1:
-    w_tsla = st.slider("TSLA %", 0, 100, 20, step=1)
+    st.session_state.w_tsla = st.slider(
+        "TSLA %", 0, 100, int(st.session_state.w_tsla), step=1, on_change=_on_tsla_change
+    )
 with c2:
-    w_spy = st.slider("SPY %", 0, 100, 50, step=1)
+    st.session_state.w_spy = st.slider(
+        "SPY %", 0, 100, int(st.session_state.w_spy), step=1, on_change=_on_spy_change
+    )
 with c3:
-    w_bnd = st.slider("BND %", 0, 100, 30, step=1)
-with c4:
-    auto_norm = st.checkbox("Auto-normalize", value=True)
+    st.session_state.w_bnd = st.slider(
+        "BND %", 0, 100, int(st.session_state.w_bnd), step=1, on_change=_on_bnd_change
+    )
 
-w = np.array([w_tsla, w_spy, w_bnd], dtype=float) / 100.0
-if auto_norm:
+# Build weights for downstream calc
+w = np.array([st.session_state.w_tsla, st.session_state.w_spy, st.session_state.w_bnd], dtype=float) / 100.0
+st.caption(f"Remaining allocation: **{max(0, 100 - int(round(w.sum()*100))):.0f}%**")
+
+
+
+# If you still offer 'Auto-normalize', apply it AFTER the hard-cap logic:
+if locals().get('auto_norm', False):
+    from src.portfolio.streamlit_utils import normalize_weights
     w = normalize_weights(w)
 
+
+
+
+
+
 # Presets & optimize buttons
+from src.portfolio.streamlit_utils import load_presets_json
+presets_json = load_presets_json()
+
 b1, b2, b3, b4, b5 = st.columns(5)
+
 with b1:
     if st.button("60 / 40"):
-        w = np.array([0.0, 0.60, 0.40])
+        if presets_json and "sixty_forty" in presets_json["weights"]:
+            _queue_weights(presets_json["weights"]["sixty_forty"])
+        else:
+            _queue_weights({"TSLA": 0.0, "SPY": 0.60, "BND": 0.40})
+
 with b2:
     if st.button("Max Sharpe"):
-        # simple Monte Carlo search (fast & good enough)
-        rng = np.random.default_rng(42)
-        W = rng.random((8000, 3)); W = W / W.sum(axis=1, keepdims=True)
-        rets = W @ mu.values
-        vols = np.sqrt(np.sum(W @ cov.values * W, axis=1))
-        sharpe = (rets - 0.01) / vols
-        w = W[np.argmax(sharpe)]
+        if presets_json and "max_sharpe" in presets_json["weights"]:
+            _queue_weights(presets_json["weights"]["max_sharpe"])
+        else:
+            st.warning("No Max Sharpe preset in presets.json")
+
 with b3:
     if st.button("Min Vol"):
-        rng = np.random.default_rng(7)
-        W = rng.random((8000, 3)); W = W / W.sum(axis=1, keepdims=True)
-        vols = np.sqrt(np.sum(W @ cov.values * W, axis=1))
-        w = W[np.argmin(vols)]
+        if presets_json and "min_vol" in presets_json["weights"]:
+            _queue_weights(presets_json["weights"]["min_vol"])
+        else:
+            st.warning("No Min Vol preset in presets.json")
+
+# assumes: tickers = ["TSLA","SPY","BND"], mu and cov already built above
+from src.portfolio.streamlit_utils import load_daily_returns
+
 with b4:
     if st.button("Max Return"):
-        rng = np.random.default_rng(21)
-        W = rng.random((8000, 3)); W = W / W.sum(axis=1, keepdims=True)
-        rets = W @ mu.values
-        w = W[np.argmax(rets)]
+        # Use notebook preset if present
+        if presets_json and "max_return" in presets_json.get("weights", {}):
+            _apply_weights_dict(presets_json["weights"]["max_return"])
+        else:
+            # Deterministic fallback: 100% to asset with highest expected return μ
+            best = mu.idxmax()  # "TSLA" or "SPY" or "BND"
+            wdict = {t: 0.0 for t in tickers}
+            wdict[best] = 1.0
+            _apply_weights_dict(wdict)
+
 with b5:
     if st.button("Risk Parity"):
-        # inverse vol heuristic on historical daily returns
-        rets_df = load_daily_returns(tuple(tickers))
-        iv = 1.0 / rets_df.std().values
-        w = iv / iv.sum()
+        if presets_json and "risk_parity" in presets_json.get("weights", {}):
+            _apply_weights_dict(presets_json["weights"]["risk_parity"])
+        else:
+            # Fallback: inverse-volatility weights on historical daily returns
+            rets_df = load_daily_returns(tuple(tickers))
+            inv_vol = 1.0 / rets_df.std()
+            w_iv = (inv_vol / inv_vol.sum()).astype(float)
+            _apply_weights_dict({t: float(w_iv[t]) for t in tickers})
+
+
 
 # Show current weights
 st.caption(f"Current Weights → TSLA: **{w[0]*100:.2f}%**, SPY: **{w[1]*100:.2f}%**, BND: **{w[2]*100:.2f}%**")
