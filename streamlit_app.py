@@ -5,6 +5,8 @@ from datetime import date
 import plotly.graph_objects as go
 import os
 import numpy as np
+import plotly.graph_objects as go
+
 from src.portfolio_utils import compute_max_return_weights
 from src.portfolio.streamlit_utils import (
     load_price_df, filter_by_date, latest_price_and_change, last_updated_timestamp
@@ -421,6 +423,186 @@ with dl2:
 
 
 
+# =======================
+# 📈 Backtest: Strategy vs 60/40
+# =======================
+st.divider()
+st.markdown("## 📈 Backtest: Strategy vs 60/40")
+
+from src.portfolio.streamlit_utils import load_daily_returns
+
+# 1) Daily returns and filter to selected range
+rets = load_daily_returns(("TSLA","SPY","BND"))
+rets_rng = rets.loc[str(start_d):str(end_d)].copy()
+if rets_rng.empty:
+    st.warning("No data in the selected range. Adjust the date filter above.")
+else:
+    # 2) Strategy (current weights) vs benchmark (60/40 SPY/BND)
+    w_vec = w  # already a numpy array of len 3 in decimal (TSLA, SPY, BND)
+    bench_w = np.array([0.0, 0.60, 0.40])
+
+    strat_ret = (rets_rng * w_vec).sum(axis=1)
+    bench_ret = (rets_rng * bench_w).sum(axis=1)
+
+    # 3) Cumulative value (start=1.0)
+    cum_s = (1 + strat_ret).cumprod()
+    cum_b = (1 + bench_ret).cumprod()
+
+    # 4) Annualized Sharpe on the window (rf = 1%)
+    def _ann_sharpe(r):
+        mu_d = r.mean()
+        sd_d = r.std()
+        if sd_d == 0 or np.isnan(sd_d):
+            return np.nan
+        mu_a = mu_d * 252.0
+        sd_a = sd_d * np.sqrt(252.0)
+        return (mu_a - 0.01) / sd_a
+
+    s_total = float(cum_s.iloc[-1] - 1)
+    b_total = float(cum_b.iloc[-1] - 1)
+    s_sharpe = _ann_sharpe(strat_ret)
+    b_sharpe = _ann_sharpe(bench_ret)
+
+    # 5) Plot
+    bt_fig = go.Figure()
+    bt_fig.add_trace(go.Scatter(x=cum_s.index, y=cum_s.values, name="Strategy", mode="lines"))
+    bt_fig.add_trace(go.Scatter(x=cum_b.index, y=cum_b.values, name="60/40 (SPY/BND)", mode="lines"))
+    bt_fig.update_layout(
+        height=420, template="plotly_white",
+        yaxis_title="Cumulative Value (start = 1.00)"
+    )
+    st.plotly_chart(bt_fig, use_container_width=True)
+
+    # 6) Metrics
+    c1, c2 = st.columns(2)
+    c1.metric("Strategy — Total Return", f"{s_total*100:.2f}%")
+    c1.metric("Strategy — Sharpe (rf=1%)", f"{s_sharpe:.2f}")
+    c2.metric("Benchmark 60/40 — Total Return", f"{b_total*100:.2f}%")
+    c2.metric("Benchmark 60/40 — Sharpe (rf=1%)", f"{b_sharpe:.2f}")
+
+
+# --- Dollar growth based on the investment amount from the Playground ---
+# Reuse your existing 'invest_amount' number_input (from VaR panel). If it's defined elsewhere, bring it above or repeat it here.
+ending_strategy = float(cum_s.iloc[-1]) * float(invest_amount)
+ending_benchmark = float(cum_b.iloc[-1]) * float(invest_amount)
+
+pnl_strategy = ending_strategy - float(invest_amount)
+pnl_benchmark = ending_benchmark - float(invest_amount)
+
+# Dollar-value plot (optional but nice)
+bt_dollar = go.Figure()
+bt_dollar.add_trace(go.Scatter(
+    x=cum_s.index, y=cum_s.values * float(invest_amount),
+    name="Strategy ($)", mode="lines"
+))
+bt_dollar.add_trace(go.Scatter(
+    x=cum_b.index, y=cum_b.values * float(invest_amount),
+    name="60/40 ($)", mode="lines"
+))
+bt_dollar.update_layout(
+    height=420, template="plotly_white",
+    yaxis_title=f"Portfolio Value ($, start = ${int(invest_amount):,})"
+)
+st.plotly_chart(bt_dollar, use_container_width=True)
+
+# Dollar KPIs
+dc1, dc2 = st.columns(2)
+dc1.metric("Strategy — Final Value", f"${ending_strategy:,.0f}", f"{pnl_strategy:,.0f}")
+dc2.metric("Benchmark — Final Value", f"${ending_benchmark:,.0f}", f"{pnl_benchmark:,.0f}")
+
+
+
+# =======================
+# 🧭 Efficient Frontier
+# =======================
+st.divider()
+st.markdown("## 🧭 Efficient Frontier")
+
+from src.portfolio.streamlit_utils import load_presets_json
+_p = load_presets_json()  # loads results/optimization/presets.json if present
+
+rng = np.random.default_rng(123)
+N = 12000
+W = rng.random((N, 3))
+W = W / W.sum(axis=1, keepdims=True)
+
+# Monte Carlo portfolios (annualized ER/Vol using your mu, cov)
+rets_mc = W @ mu.values
+vols_mc = np.sqrt(np.sum(W @ cov.values * W, axis=1))
+sharpe_mc = (rets_mc - 0.01) / vols_mc  # rf = 1%
+
+# Build customdata for tooltips: [TSLA_w, SPY_w, BND_w, Sharpe]
+custom = np.column_stack([W[:, 0], W[:, 1], W[:, 2], sharpe_mc])
+
+ef_fig = go.Figure()
+ef_fig.add_trace(go.Scatter(
+    x=vols_mc, y=rets_mc,
+    mode="markers", name="Portfolios",
+    opacity=0.35, marker=dict(size=5),
+    customdata=custom,
+    hovertemplate=(
+        "Vol (ann): %{x:.2%}<br>"
+        "ER (ann): %{y:.2%}<br>"
+        "Sharpe: %{customdata[3]:.2f}<br>"
+        "TSLA: %{customdata[0]:.2%} | "
+        "SPY: %{customdata[1]:.2%} | "
+        "BND: %{customdata[2]:.2%}<extra></extra>"
+    )
+))
+
+# Current weights marker (uses w, mu, cov defined earlier)
+cur_ret = float(w @ mu.values)
+cur_vol = float(np.sqrt(w @ cov.values @ w))
+ef_fig.add_trace(go.Scatter(
+    x=[cur_vol], y=[cur_ret],
+    mode="markers+text", name="Current",
+    marker=dict(size=12, color="#00A676"),
+    text=["Current"], textposition="top center",
+    hovertemplate=(
+        f"Vol (ann): {cur_vol:.2%}<br>"
+        f"ER (ann): {cur_ret:.2%}<br>"
+        f"Weights → TSLA: {w[0]:.2%}, SPY: {w[1]:.2%}, BND: {w[2]:.2%}"
+        "<extra></extra>"
+    )
+))
+
+# Notebook presets (Max Sharpe / Min Vol) if available
+if _p and "weights" in _p:
+    for label in ["max_sharpe", "min_vol"]:
+        if label in _p["weights"]:
+            # Assumes mu.index order matches ["TSLA","SPY","BND"]
+            ww = np.array([_p["weights"][label][t] for t in mu.index], dtype=float)
+            r = float(ww @ mu.values)
+            v = float(np.sqrt(ww @ cov.values @ ww))
+            ef_fig.add_trace(go.Scatter(
+                x=[v], y=[r],
+                mode="markers+text", name=label.replace("_"," ").title(),
+                marker=dict(size=12),
+                text=[label.replace("_"," ").title()], textposition="bottom center",
+                hovertemplate=(
+                    f"Vol (ann): {v:.2%}<br>"
+                    f"ER (ann): {r:.2%}<br>"
+                    f"Weights → TSLA: {ww[0]:.2%}, SPY: {ww[1]:.2%}, BND: {ww[2]:.2%}"
+                    "<extra></extra>"
+                )
+            ))
+
+ef_fig.update_layout(
+    height=420, template="plotly_white",
+    xaxis_title="Volatility (σ, annualized)",
+    yaxis_title="Expected Return (annualized)"
+)
+st.plotly_chart(ef_fig, use_container_width=True)
+
+
+
 # --- Footer ---
 st.markdown("<hr/>", unsafe_allow_html=True)
 st.caption("© GMF Investments.")
+
+
+
+
+
+
+
