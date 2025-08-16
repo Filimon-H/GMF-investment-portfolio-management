@@ -3,3 +3,6 @@ Data
 models
 results
 src/__pycache__
+.env
+.streamlit/secrets.toml
+secrets.toml

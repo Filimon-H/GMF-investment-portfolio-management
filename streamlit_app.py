@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import os
 import numpy as np
 import plotly.graph_objects as go
+from src.news_client import fetch_news_finnhub
 
 from src.portfolio_utils import compute_max_return_weights
 from src.portfolio.streamlit_utils import (
@@ -170,11 +171,97 @@ else:
 st.plotly_chart(fig, use_container_width=True)
 
 
-# --- Sidebar placeholder (we'll add Finnhub news later) ---
+
 with st.sidebar:
-    st.header("News (Coming Next)")
-    st.caption("TSLA / SPY / BND — live headlines here.")
-    st.info("We’ll integrate Finnhub 'company-news' with a refresh button.")
+    st.markdown("### 🗞️ Live News")
+
+    # Symbols you care about
+    news_symbols = st.multiselect(
+        "Tickers",
+        options=["TSLA", "SPY", "BND"],
+        default=["TSLA", "SPY", "BND"],
+    )
+
+    days_back = st.slider("Lookback (days)", min_value=1, max_value=30, value=7, step=1)
+    max_items = st.number_input("Max per feed", 3, 20, 8, step=1, help="Limit how many headlines to show")
+    refresh = st.button("Refresh News")
+
+    # Load API key from Streamlit secrets
+    finnhub_key = st.secrets.get("FINNHUB_API_KEY")
+
+    # Cache the fetch to avoid hitting API too often
+    @st.cache_data(ttl=1800, show_spinner=False)
+    def _cached_fetch_news(k: str, syms: tuple, back: int):
+        return fetch_news_finnhub(k, list(syms), days_back=back)
+
+    news_items = []
+    if not finnhub_key:
+        st.info("Add FINNHUB_API_KEY to .streamlit/secrets.toml to enable news.")
+    else:
+        if refresh:
+            _cached_fetch_news.clear()
+        if news_symbols:
+            news_items = _cached_fetch_news(finnhub_key, tuple(news_symbols), days_back)
+
+    # ---------- helpers (time-ago + snippet) ----------
+    import datetime as _dt
+
+    def _time_ago(unix_ts: int) -> str:
+        if not unix_ts:
+            return ""
+        try:
+            dt = _dt.datetime.utcfromtimestamp(unix_ts)
+            delta = _dt.datetime.utcnow() - dt
+            s = int(delta.total_seconds())
+            if s < 60:   return f"{s}s ago"
+            m = s // 60
+            if m < 60:   return f"{m}m ago"
+            h = m // 60
+            if h < 24:   return f"{h}h ago"
+            d = h // 24
+            return f"{d}d ago"
+        except Exception:
+            return ""
+
+    def _snippet(text: str, n: int = 180) -> str:
+        if not text:
+            return ""
+        text = text.strip().replace("\n", " ")
+        return text if len(text) <= n else text[: n - 1] + "…"
+
+    # ---------- render compact cards ----------
+    if news_items:
+        shown = 0
+        for item in news_items:
+            if shown >= max_items:
+                break
+
+            sym   = item.get("symbol", "")
+            sent  = item.get("sentiment", "→")          # ↑ / ↓ / →
+            src   = (item.get("source") or "").upper()
+            hdl   = item.get("headline") or ""
+            url   = item.get("url") or "#"
+            summ  = item.get("summary") or ""
+            img   = item.get("image") or ""
+            when  = _time_ago(item.get("time"))
+
+            # sentiment chip (minimal emoji)
+            chip = {"↑": "✅", "↓": "🔻", "→": "➜"}.get(sent, "➜")
+
+            with st.container():
+                st.markdown(f"**{chip} [{sym}] [{hdl}]({url})**")
+                meta = " • ".join(x for x in [src, when] if x)
+                if meta:
+                    st.caption(meta)
+                if summ:
+                    st.write(_snippet(summ, 180))
+                if img:
+                    st.image(img, use_container_width=True, clamp=True)
+                st.divider()
+            shown += 1
+    else:
+        st.write("No news to display yet.")
+
 
 
 
@@ -593,6 +680,118 @@ ef_fig.update_layout(
     yaxis_title="Expected Return (annualized)"
 )
 st.plotly_chart(ef_fig, use_container_width=True)
+
+
+
+st.divider()
+
+# =========================
+# 🗞️ Market News (center)
+# =========================
+st.markdown("## 🗞️ Market News")
+
+# Imports
+from collections import defaultdict
+import datetime as _dt
+
+from src.news_client import fetch_news_finnhub
+from src.summarizer import summarize_with_groq         # returns SummaryResult
+from src.article_fetcher import fetch_article_text, choose_text_for_summary
+
+# --- Read settings coming from sidebar controls ---
+news_symbols = st.session_state.get("news_symbols", ["TSLA", "SPY", "BND"])
+days_back    = st.session_state.get("news_days_back", 7)
+use_llm      = st.session_state.get("use_llm_news", True)
+refresh_news = st.session_state.get("refresh_news", False)
+
+# --- Helpers ---
+@st.cache_data(ttl=1800, show_spinner=False)
+def _cached_fetch_news(k: str, syms: tuple, back: int):
+    return fetch_news_finnhub(k, list(syms), days_back=back)
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_summarize(text: str, sym: str, enabled: bool):
+    if not enabled:
+        t = (text or "").strip()
+        t = (t[:500] + "…") if len(t) > 500 else t
+        return {"summary": t, "sentiment": "Neutral"}
+    res = summarize_with_groq(text, sym)  # SummaryResult
+    return {"summary": res.summary, "sentiment": res.sentiment}
+
+def _time_ago(unix_ts: int) -> str:
+    if not unix_ts:
+        return ""
+    dt = _dt.datetime.utcfromtimestamp(unix_ts)
+    delta = _dt.datetime.utcnow() - dt
+    s = int(delta.total_seconds())
+    if s < 60: return f"{s}s ago"
+    m = s // 60
+    if m < 60: return f"{m}m ago"
+    h = m // 60
+    if h < 24: return f"{h}h ago"
+    return f"{h // 24}d ago"
+
+def _sent_prefix(sentiment: str) -> str:
+    s = (sentiment or "").lower()
+    if s.startswith(("good", "pos")): return "+ve"
+    if s.startswith(("bad", "neg")):  return "-ve"
+    return "N"
+
+# --- Fetch + render ---
+finnhub_key = st.secrets.get("FINNHUB_API_KEY")
+if not finnhub_key:
+    st.info("Add FINNHUB_API_KEY to `.streamlit/secrets.toml` to enable live news.")
+else:
+    if refresh_news:
+        _cached_fetch_news.clear()
+        _cached_summarize.clear()
+
+    if not news_symbols:
+        st.warning("Select at least one ticker in the sidebar to view news.")
+    else:
+        items = _cached_fetch_news(finnhub_key, tuple(news_symbols), days_back) or []
+        by_sym = defaultdict(list)
+        for it in items:
+            by_sym[it.get("symbol", "")].append(it)
+
+        if not by_sym:
+            st.write("No news to display yet.")
+        else:
+            tabs = st.tabs(list(by_sym.keys()))
+            for sym, tab in zip(by_sym.keys(), tabs):
+                with tab:
+                    for it in by_sym[sym]:
+                        hdl     = it.get("headline") or ""
+                        url     = it.get("url") or "#"
+                        fin_sum = it.get("summary") or ""    # short publisher blurb
+                        img     = it.get("image") or ""
+                        src     = (it.get("source") or "").upper()
+                        when    = _time_ago(it.get("time"))
+
+                        # NEW: try to fetch full article body (free)
+                        article_text = fetch_article_text(url)
+
+                        # Pick best text to summarize: article > finnhub summary > headline
+                        news_text = choose_text_for_summary(hdl, fin_sum, article_text)
+
+                        # Summarize & classify impact (cached)
+                        sres = _cached_summarize(news_text, sym, use_llm)
+                        prefix = _sent_prefix(sres["sentiment"])
+
+                        # Card layout
+                        col_img, col_txt = st.columns([0.26, 0.74])
+                        with col_img:
+                            if img:
+                                st.image(img, use_container_width=True, clamp=True)
+                        with col_txt:
+                            st.markdown(f"**{prefix} [{sym}] [{hdl}]({url})**")
+                            st.caption(" • ".join([s for s in [src, when] if s]))
+                            # sres["summary"] now contains 3–5 bullets + takeaway (from Groq)
+                            if sres["summary"]:
+                                st.markdown(sres["summary"])
+                        st.markdown("---")
+
+st.caption("News & summaries are informational only and not investment advice.")
 
 
 
