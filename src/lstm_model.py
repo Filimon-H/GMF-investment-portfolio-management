@@ -71,7 +71,7 @@ def load_lstm_and_scaler() -> Tuple:
 
     return model, scaler
 
-
+@st.cache_data(ttl=3600)
 def get_last_close_window(close_series, lookback: int) -> np.ndarray:
     """
     Build the last lookback-length window from a Pandas Series of Close prices.

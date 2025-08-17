@@ -9,6 +9,9 @@ from typing import Tuple, Optional, List
 
 
 
+
+
+
 DATA_DIR = os.path.join("Data", "processed")   # <-- matches your screenshot
 
 def _csv_path_for(ticker: str) -> str:
@@ -192,7 +195,7 @@ def normal_var(amount: float, ann_ret: float, ann_vol: float, months: int, alpha
 import json
 import streamlit as st
 
-@st.cache_data(ttl=300, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_presets_json(path: str = "results/optimization/presets.json"):
     if not os.path.exists(path):
         return None

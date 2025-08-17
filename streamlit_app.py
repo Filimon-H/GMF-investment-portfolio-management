@@ -8,6 +8,8 @@ import numpy as np
 import plotly.graph_objects as go
 from src.news_client import fetch_news_finnhub
 
+
+
 from src.portfolio_utils import compute_max_return_weights
 from src.portfolio.streamlit_utils import (
     load_price_df, filter_by_date, latest_price_and_change, last_updated_timestamp
@@ -41,6 +43,7 @@ with ctrl1:
 
 # Load data early to compute date bounds
 df_all = load_price_df(ticker)
+
 min_d, max_d = df_all.index.min().date(), df_all.index.max().date()
 
 
@@ -101,9 +104,9 @@ if ticker == "TSLA":
 
     fc_cols = st.columns([0.25, 0.25, 0.5])
     with fc_cols[0]:
-        months = st.selectbox("Forecast Horizon (months)", [3, 6, 9, 12, 18, 24], index=3)
+        months = st.selectbox("Forecast Horizon (months)", [3, 6, 9, 12, 18, 24], index=3, key="fc_months")
     with fc_cols[1]:
-        lookback = st.number_input("LSTM Lookback (days)", min_value=30, max_value=180, value=60, step=5)
+        lookback = st.number_input("LSTM Lookback (days)", min_value=30, max_value=180, value=60, step=5, key="fc_lookback")
     with fc_cols[2]:
         st.caption("TSLA is forecast with the saved LSTM model. SPY/BND use historical returns.")
 
@@ -283,10 +286,6 @@ if "_queued_weights" in st.session_state:
     st.session_state.w_bnd  = int(round(q["BND"]  * 100))
 
 
-
-
-
-
 st.divider()
 st.markdown("## 🎛️ Portfolio Playground")
 
@@ -328,20 +327,6 @@ def _apply_weights_dict(wdict: dict[str, float]):
     st.rerun()  # <- important to refresh the slider positions
 
 
-
-
-
-# --- Constrained sliders: always sum to 100% ---
-# --- HARD-CAP SLIDERS: sum cannot exceed 100% ---
-
-# Initialize defaults in session_state (so presets can move them too)
-# --- THREE SLIDERS, EACH 0–100, WITH SUM HARD-CAPPED AT 100 ---
-# Behavior: when you move one slider, the other two are auto-adjusted so total ≤ 100
-
-# --- Three sliders 0..100 with auto-rebalance so total <= 100 ---
-
-# Initialize once
-# --- THREE SLIDERS, SUM ALWAYS 100, WITH YOUR DESIRED RULES ---
 
 def _init(k, v):
     if k not in st.session_state:
@@ -388,17 +373,10 @@ with c3:
 w = np.array([st.session_state.w_tsla, st.session_state.w_spy, st.session_state.w_bnd], dtype=float) / 100.0
 st.caption(f"Remaining allocation: **{max(0, 100 - int(round(w.sum()*100))):.0f}%**")
 
-
-
 # If you still offer 'Auto-normalize', apply it AFTER the hard-cap logic:
 if locals().get('auto_norm', False):
     from src.portfolio.streamlit_utils import normalize_weights
     w = normalize_weights(w)
-
-
-
-
-
 
 # Presets & optimize buttons
 from src.portfolio.streamlit_utils import load_presets_json
