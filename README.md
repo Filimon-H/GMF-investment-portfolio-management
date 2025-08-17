@@ -210,7 +210,8 @@ As part of this project, we developed an **interactive Streamlit dashboard** to 
 - **Portfolio Optimization Explorer** 🧮 – Efficient Frontier, Max Sharpe, and Min Volatility portfolios.  
 - **Backtesting Dashboard** 📊 – strategy vs. benchmark cumulative returns.  
 - **Interactive Controls** ⚡ – date range filters, ticker selection, refresh buttons.  
-
+![alt text](image.png)
+![alt text](image-1.png)
 ### 🚀 Usage
 To launch the dashboard locally:
 ```bash
