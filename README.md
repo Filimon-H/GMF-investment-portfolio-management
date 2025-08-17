@@ -195,6 +195,28 @@ python scripts/preprocess.py
 
 ---
 
+## 🖥️ Dashboard Development
+
+As part of this project, we developed an **interactive Streamlit dashboard** to make the forecasting and portfolio optimization results more accessible to stakeholders.  
+
+### 🔑 Purpose
+- Provide a **clear, visual interface** for investors and analysts.  
+- Allow users to **explore forecasts, portfolio allocations, and backtests** without running notebooks.  
+- Enable **news sentiment integration** using Groq API + Finnhub API to contextualize market movements.  
+
+### ✨ Features
+- **Market News Section** 📰 – real-time headlines with Groq-powered sentiment classification (`+ve`, `-ve`, `N`).  
+- **Forecast Visualizations** 📈 – LSTM-based forecasts with confidence bands.  
+- **Portfolio Optimization Explorer** 🧮 – Efficient Frontier, Max Sharpe, and Min Volatility portfolios.  
+- **Backtesting Dashboard** 📊 – strategy vs. benchmark cumulative returns.  
+- **Interactive Controls** ⚡ – date range filters, ticker selection, refresh buttons.  
+
+### 🚀 Usage
+To launch the dashboard locally:
+```bash
+streamlit run streamlit_app.py
+
+
 ## 🏁 Conclusion
 - LSTM outperformed ARIMA for TSLA forecasting, providing a reliable basis for portfolio decisions.
 - MPT optimization produced two clear strategies:
