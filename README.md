@@ -212,9 +212,9 @@ As part of this project, we developed an **interactive Streamlit dashboard** to 
 - **Interactive Controls** ⚡ – date range filters, ticker selection, refresh buttons.  
 ![alt text](image.png)
 ![alt text](image-1.png)
+
 ### 🚀 Usage
 To launch the dashboard locally:
-```bash
 streamlit run streamlit_app.py
 
 
