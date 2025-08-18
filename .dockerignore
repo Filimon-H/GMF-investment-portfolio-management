@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.git/
+data/raw/*
+data/processed/*
+models/*  # if you mount at runtime; otherwise copy only needed files
+results/*
+reports/*
+*.ipynb_checkpoints/

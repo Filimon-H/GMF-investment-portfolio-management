@@ -1,8 +1,11 @@
 Data
 .venv
 models
-results
+results/
 src/__pycache__
 .env
 .streamlit/secrets.toml
 secrets.toml
+results/plots
+re
+reports

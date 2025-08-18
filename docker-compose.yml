@@ -1,0 +1,25 @@
+services:
+  gmf-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      FINNHUB_API_KEY: "${FINNHUB_API_KEY}"
+      GROQ_API_KEY: "${GROQ_API_KEY}"
+      STREAMLIT_SERVER_HEADLESS: "true"
+      STREAMLIT_SERVER_PORT: "8501"
+      STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+    volumes:
+      - streamlit_cache:/root/.cache/streamlit
+      - news_cache:/app/.cache/news
+    restart: unless-stopped
+    mem_limit: 4g
+    cpus: "2.0"
+
+volumes:
+  streamlit_cache:
+  news_cache:
