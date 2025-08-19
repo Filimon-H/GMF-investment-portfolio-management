@@ -29,7 +29,7 @@ with col_logo:
     st.image("Data/raw/GMF.png", width=500) # placeholder for your logo (replace later)
 with col_title:
     st.markdown("## GMF Investments — Forecast & Portfolio Dashboard")
-    #st.caption("Forecasts are for informational purposes only.")
+    
 with col_kpis:
     st.caption(f"Last updated: **{last_updated_timestamp()}**")
 

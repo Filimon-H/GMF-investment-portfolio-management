@@ -237,6 +237,23 @@ streamlit run streamlit_app.py
 
 ---
 
+## 📦 Dockerization  
+
+We provide a **Dockerized environment** to ensure reproducibility and easy deployment of the dashboard. This eliminates dependency conflicts and makes it simple to run the project on any machine or cloud environment.  
+
+### **1. Build the Docker image**
+docker build -t gmf-dashboard .
+2. Run the container
+
+docker run -p 8501:8501 gmf-dashboard
+The dashboard will be available at:
+👉 http://localhost:8501
+
+3. Using Docker Compose (optional, for multi-service setups like database + API + dashboard)
+docker-compose up --build
+This allows services (e.g., Streamlit app, FastAPI backend, PostgreSQL) to run together in a consistent environment.
+
+
 ## 🆘 Troubleshooting
 - **ModuleNotFoundError: `src`** → Add:
 ```python
